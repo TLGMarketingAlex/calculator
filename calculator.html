@@ -1,0 +1,1047 @@
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<div class="offer-demand-tracker">
+  <style>
+    /* Base canvas */
+    .offer-demand-tracker { margin:0 auto; font-family: Arial, sans-serif; background:#20262b; border-radius:12px; overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,.35); color:#e5ecf2; }
+
+    /* Header bar */
+    .tracker-header { background:#139cd2; color:#fff; text-align:center; padding:18px; font-size:24px; font-weight:700; letter-spacing:.3px; }
+
+    /* KPI boxes */
+    .tracker-timers { display:grid; grid-template-columns: repeat(4, 1fr); gap:16px; background:#1b2227; padding:16px; border-bottom:1px solid rgba(19,156,210,.35); }
+    .tracker-timer-box { background:#222a31; border:1px solid rgba(255,255,255,.06); border-radius:10px; padding:14px 16px; text-align:center; box-shadow: inset 0 0 0 1px rgba(255,255,255,.03); }
+    .tracker-timer-label { display:block; color:#a0cfe6; font-size:12px; margin-bottom:6px; font-weight:600; opacity:.9; }
+    .tracker-timer-value { font-size:20px; color:#e6f7ff; font-weight:800; letter-spacing:.3px; }
+
+    /* Container spacing */
+    .tracker-container { padding:20px; }
+
+    /* Section cards */
+    .section-card { background:#222a31; border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:18px; margin-bottom:20px; box-shadow: 0 10px 24px rgba(0,0,0,.22); }
+    .section-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+    .section-title { font-size:20px; font-weight:800; color:#f1f6fa; letter-spacing:.2px; }
+    .badge { display:inline-block; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:700; letter-spacing:.3px; }
+    .badge-preview { background:#f1b60e; color:#1e1e1e; }
+
+    /* Current round grid like reference: [Bracket] [Demand] [Mid] [Offer] [Bracket] */
+    .current-grid { display:grid; grid-template-columns: 120px 1fr 1fr 1fr 120px; gap:16px; align-items:start; }
+    .current-block { background:#1e252a; border:1px solid rgba(255,255,255,.06); border-radius:10px; padding:12px 14px; min-height:84px; position:relative; }
+    .block-label { display:block; font-size:12px; color:#c5d7e1; margin-bottom:8px; font-weight:700; letter-spacing:.3px; }
+
+    .vr-main-input { background:#11181d; border:2px solid #49545d; color:#fff; padding:12px 12px; border-radius:8px; font-size:16px; width:100%; transition:border-color .25s ease, box-shadow .25s ease; }
+    .vr-main-input::placeholder { color:#93a1ac; }
+    .vr-main-input:focus { outline:none; border-color:#139cd2; box-shadow:0 0 0 4px rgba(19,156,210,.18); }
+
+    .midpoint-box { background:#0e2c3a; border:2px solid #0f82af; color:#8fd7f0; padding:12px; border-radius:10px; font-size:22px; font-weight:900; text-align:center; letter-spacing:.4px; }
+    .sub-muted { margin-top:6px; font-size:12px; color:#9fcfe4; }
+
+    .vr-bracket-toggle { display:flex; align-items:center; gap:10px; }
+    .vr-check { width:38px; height:38px; border-radius:8px; border:2px solid #6e3ea4; background:#2c2040; display:grid; place-items:center; cursor:pointer; transition:transform .2s ease, background .2s ease; }
+    .vr-check input { display:none; }
+    .vr-check.active { background:#6e3ea4; box-shadow:0 0 0 4px rgba(110,62,164,.25) inset; }
+    .vr-check::after { content:""; width:16px; height:16px; border:3px solid #fff; border-left:0; border-top:0; transform: rotate(45deg) translateY(-2px); opacity:0; transition:opacity .2s ease; }
+    .vr-check.active::after { opacity:1; }
+
+    .bracket-inputs { display:none; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px; }
+    .bracket-inputs.active { display:grid; }
+    .vr-bracket-input { background:#11181d; border:2px solid #49545d; color:#fff; padding:8px 10px; border-radius:8px; font-size:14px; width:100%; }
+    .vr-bracket-input:focus { outline:none; border-color:#139cd2; box-shadow:0 0 0 3px rgba(19,156,210,.18); }
+    .bracket-display { color:#e9e9e9; font-weight:700; font-size:13px; background: rgba(255,255,255,0.07); padding:8px; border-radius:8px; margin-top:8px; }
+
+    .button-row { display:flex; flex-wrap:wrap; gap:12px; margin-top:16px; }
+    .btn { padding:12px 18px; border:none; border-radius:8px; font-size:14px; font-weight:800; cursor:pointer; transition:transform .2s ease, filter .2s ease; letter-spacing:.4px; }
+    .btn:hover { transform: translateY(-2px); filter:brightness(1.07); }
+    .btn-primary { background:#139cd2; color:#fff; }
+    .btn-success { background:#2ecc71; color:#0c2015; }
+    .btn-purple { background:#9b59b6; color:#fff; }
+    .btn-warn { background:#d26f6f; color:#fff; }
+    .btn-stroke { background:#6c757d; color:#fff; }
+
+    /* History section */
+    .history-table { width:100%; border-collapse:separate; border-spacing:0; overflow:hidden; border-radius:12px; }
+    .history-table thead th { background:#2a3239; color:#e6f7ff; padding:12px 10px; font-size:13px; text-align:left; border-bottom:1px solid rgba(255,255,255,.06); }
+    .history-table tbody td { background:#222a31; color:#e9f2f8; padding:14px 10px; border-bottom:1px solid rgba(255,255,255,.06); }
+    .history-table tbody tr:nth-child(odd) td { background:#252e35; }
+    .pill { display:inline-block; padding:6px 10px; border-radius:999px; font-size:12px; font-weight:800; }
+    .pill-preview { background:#3a3320; color:#f2c14e; border:1px solid rgba(242,193,78,.45); }
+    .num-red { color:#ff6b6b; font-weight:900; }
+    .num-green { color:#2ecc71; font-weight:900; }
+    .num-blue { color:#8fd7f0; font-weight:900; }
+
+    /* Chart container */
+    .chart-container { background:#1a1f24; border:1px solid rgba(255,255,255,.06); border-radius:12px; padding:22px; margin-top:20px; }
+    .chart-title { color:#e9f2f8; font-size:18px; font-weight:800; text-align:center; margin-bottom:14px; }
+    .chart-extras { display:grid; gap:10px; margin-top:12px; }
+    .round-durations, .round-comparisons { background:#151a1e; border:1px solid #3a3f45; color:#eaeaea; border-radius:10px; padding:10px 12px; }
+    .round-item { display:inline-block; background:#0e2e38; color:#a5e0f5; border:1px solid #0f82af; border-radius:6px; padding:6px 8px; margin:4px; font-size:12px; }
+
+    /* Keep original calc table but hide it off-screen (logic engine) */
+    .engine-hidden { position:absolute !important; left:-9999px !important; top:-9999px !important; width:1px !important; height:1px !important; overflow:hidden !important; }
+
+    /* Responsive */
+    @media (max-width: 980px) {
+      .current-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+
+  <div class="tracker-header">Offer/Demand Tracker</div>
+
+  <div class="tracker-timers">
+    <div class="tracker-timer-box">
+      <span class="tracker-timer-label">Total Time</span>
+      <span id="trackerTotalTime" class="tracker-timer-value">00:00:00</span>
+    </div>
+    <div class="tracker-timer-box">
+      <span class="tracker-timer-label">Since Last Change</span>
+      <span id="trackerSinceLast" class="tracker-timer-value">00:00:00</span>
+    </div>
+    <div class="tracker-timer-box">
+      <span class="tracker-timer-label">Rounds</span>
+      <span id="trackerRoundsCount" class="tracker-timer-value">0</span>
+    </div>
+    <div class="tracker-timer-box">
+      <span class="tracker-timer-label">Offer Process Status</span>
+      <span id="trackerProcessStatus" class="tracker-timer-value">Waiting for first input…</span>
+    </div>
+  </div>
+
+  <div class="tracker-container">
+    <!-- Current Round Input (visible UI) -->
+    <div class="section-card">
+      <div class="section-header">
+        <div class="section-title">Current Round Input</div>
+        <span id="vrPreviewBadge" class="badge badge-preview" style="display:none;">Preview Mode</span>
+      </div>
+      <div class="current-grid">
+        <!-- Left Bracket (Demand) -->
+        <div class="current-block">
+          <span class="block-label">Bracket</span>
+          <div class="vr-bracket-toggle">
+            <div id="vrCheckLeft" class="vr-check" role="button" aria-label="Toggle demand bracket"></div>
+   
+          </div>
+        </div>
+        <!-- Demand Value -->
+        <div class="current-block">
+          <span class="block-label">Demand Value</span>
+          <input id="vr-demand" class="vr-main-input" placeholder="Enter Demand">
+                   <div>
+              <div id="vr-demand-bracket" class="bracket-inputs">
+                <input id="vr-demand-low" class="vr-bracket-input" placeholder="Low Number">
+                <input id="vr-demand-high" class="vr-bracket-input" placeholder="High Number">
+              </div>
+              <div id="vr-demand-display" class="bracket-display" style="display:none;"></div>
+              <div id="vr-demand-time" class="sub-muted"></div>
+            </div>
+        </div>
+        <!-- Midpoint -->
+        <div class="current-block">
+          <span class="block-label">Calculated Midpoint</span>
+          <div id="vr-midpoint" class="midpoint-box">—</div>
+          <div id="vr-mid-duration" class="sub-muted"></div>
+        </div>
+        <!-- Offer Value -->
+        <div class="current-block">
+          <span class="block-label">Offer Value</span>
+          <input id="vr-offer" class="vr-main-input" placeholder="Enter Offer">
+                      <div>
+              <div id="vr-offer-bracket" class="bracket-inputs">
+                <input id="vr-offer-low" class="vr-bracket-input" placeholder="Low Number">
+                <input id="vr-offer-high" class="vr-bracket-input" placeholder="High Number">
+              </div>
+              <div id="vr-offer-display" class="bracket-display" style="display:none;"></div>
+              <div id="vr-offer-time" class="sub-muted"></div>
+            </div>
+        </div>
+        <!-- Right Bracket (Offer) -->
+        <div class="current-block">
+          <span class="block-label">Bracket</span>
+          <div class="vr-bracket-toggle">
+            <div id="vrCheckRight" class="vr-check" role="button" aria-label="Toggle offer bracket"></div>
+
+          </div>
+        </div>
+      </div>
+
+      <div class="button-row">
+        <button class="btn btn-success" onclick="vrPreview()">Preview</button>
+        <button class="btn btn-primary" onclick="vrCalculateConfirm()">Calculate & Confirm</button>
+        <button class="btn btn-purple" onclick="vrHypothetical()">Enter Hypothetical</button>
+        <button class="btn btn-warn" onclick="vrResetAll()">Reset All</button>
+        <button class="btn btn-stroke" onclick="trackerSavePDF()">Print</button>
+        <button class="btn btn-stroke" onclick="trackerSavePDF()">Save</button>
+      </div>
+    </div>
+
+    <!-- Hidden original calculation table (ENGINE) -->
+    <table class="engine-hidden" id="trackerMidPointRows">
+      <thead>
+        <tr>
+          <th>Bracket</th>
+          <th>Percentage</th>
+          <th>Differential</th>
+          <th>Demand</th>
+          <th>MidPoint</th>
+          <th>Offer</th>
+          <th>Differential</th>
+          <th>Percentage</th>
+          <th>Bracket</th>
+          <th>Time</th>
+        </tr>
+      </thead>
+      <tbody id="trackerDataTable">
+        <tr id="trackerTestRow">
+          <td class="bg-info">
+            <input type="checkbox" id="trackerCheckLeft0" name="trackerMidCheck" class="trackerCheckLeft" data-row="0" onchange="trackerToggleBracket(this, 'left')">
+          </td>
+          <td class="text-muted tracker-demand-percentage-0">&nbsp;</td>
+          <td class="warning tracker-demand-differential-0">&nbsp;</td>
+          <td class="tracker-demand-cell-0">
+            <label class="tracker_demand_input">Enter Demand</label>
+            <input class="tracker-point-value tracker-demand-input-0" placeholder="Enter Demand" data-row="0" style="display: inline-block;" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+            <div class="tracker-bracket-inputs" id="tracker-demand-bracket-0">
+              <input class="tracker-bracket-input" placeholder="Low Number" id="tracker-demand-low-0" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+              <input class="tracker-bracket-input" placeholder="High Number" id="tracker-demand-high-0" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+            </div>
+            <div class="tracker-bracket-display" id="tracker-demand-display-0" style="display: none;"></div>
+            <div class="tracker-timestamp" id="tracker-demand-time-0"></div>
+          </td>
+          <td class="info tracker-midpoint-0">
+            <label class="tracker_mid_label">MidPoint</label>
+            <span class="tracker-midpoint-value-0"></span>
+          </td>
+          <td class="tracker-offer-cell-0">
+            <label class="tracker_offer_input">Enter Offer</label>
+            <input class="tracker-point-value tracker-offer-input-0" placeholder="Enter Offer" data-row="0" style="display: inline-block;" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+            <div class="tracker-bracket-inputs" id="tracker-offer-bracket-0">
+              <input class="tracker-bracket-input" placeholder="Low Number" id="tracker-offer-low-0" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+              <input class="tracker-bracket-input" placeholder="High Number" id="tracker-offer-high-0" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+            </div>
+            <div class="tracker-bracket-display" id="tracker-offer-display-0" style="display: none;"></div>
+            <div class="tracker-timestamp" id="tracker-offer-time-0"></div>
+          </td>
+          <td class="warning tracker-offer-differential-0">&nbsp;</td>
+          <td class="text-muted tracker-offer-percentage-0">&nbsp;</td>
+          <td class="bg-info">
+            <input type="checkbox" id="trackerCheckRight0" name="trackerMidCheck" class="trackerCheckRight" data-row="0" onchange="trackerToggleBracket(this, 'right')">
+          </td>
+          <td class="text-muted tracker-time-0">&nbsp;</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Negotiation History & Analysis -->
+    <div class="section-card">
+      <div class="section-title" style="margin-bottom:10px;">Negotiation History & Analysis</div>
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Round</th>
+            <th>Time</th>
+            <th>Duration</th>
+            <th>Demand</th>
+            <th>Change</th>
+            <th>Midpoint</th>
+            <th>Offer</th>
+            <th>Change</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="trackerHistoryBody"></tbody>
+      </table>
+    </div>
+
+    <div class="chart-container">
+      <div class="chart-title">Midpoint Calculator Graph</div>
+      <canvas id="tracker_canvas"></canvas>
+      <div class="chart-extras">
+        <div id="trackerRoundDurations" class="round-durations"></div>
+        <div id="trackerMoveComparisons" class="round-comparisons"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ======== Core state (unchanged) ========
+  let trackerRowCount = 1;
+  let trackerCalculationData = []; // { row, demand, offer, midpoint, time, durationMs }
+  let trackerChart = null;
+  let trackerStartTime = null;
+  let trackerTimerInterval = null;
+  let trackerLastChangeTime = null;
+  let trackerRoundTimestamps = []; // confirmation times per round
+  let trackerLockedRows = new Set();
+  let trackerPreviewActive = false;
+  let trackerHypoActive = false;
+
+  // ======== Number formatting (unchanged) ========
+  function trackerFormatNumber(num) {
+    if (num === null || num === undefined || num === '') return '';
+    const number = typeof num === 'string' ? parseFloat(num.replace(/,/g, '')) : num;
+    if (isNaN(number)) return '';
+    return number.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  }
+  function trackerParseNumber(str) {
+    if (!str || str === '') return 0;
+    const cleaned = str.toString().replace(/,/g, '');
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  function trackerFormatNumberInput(input) {
+    const value = input.value; if (value === '') return;
+    const number = trackerParseNumber(value);
+    if (!isNaN(number) && number !== 0) { input.value = trackerFormatNumber(number); }
+  }
+
+  // ======== Time helpers (unchanged) ========
+  function trackerFormatDuration(ms) {
+    if (!ms || ms < 0) ms = 0;
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    const pad = (x) => x.toString().padStart(2, '0');
+    return pad(h) + ':' + pad(m) + ':' + pad(sec);
+  }
+  function trackerStartGlobalTimerIfNeeded() {
+    if (!trackerStartTime) {
+      trackerStartTime = Date.now();
+      document.getElementById('trackerProcessStatus').textContent = 'In progress';
+    }
+    if (!trackerTimerInterval) {
+      trackerTimerInterval = setInterval(() => {
+        if (trackerStartTime) {
+          document.getElementById('trackerTotalTime').textContent = trackerFormatDuration(Date.now() - trackerStartTime);
+        }
+        if (trackerLastChangeTime) {
+          document.getElementById('trackerSinceLast').textContent = trackerFormatDuration(Date.now() - trackerLastChangeTime);
+        }
+      }, 1000);
+    }
+  }
+  function trackerOnUserInput() {
+    trackerStartGlobalTimerIfNeeded();
+    trackerLastChangeTime = Date.now();
+    document.getElementById('trackerSinceLast').textContent = trackerFormatDuration(0);
+  }
+
+  // ======== Keyboard (unchanged) ========
+  function trackerHandleEnterKey(event, input) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      const row = input.getAttribute('data-row') || input.id.match(/\d+$/)?.[0] || input.closest('tr').id.replace('trackerTestRow', '0').match(/\d+$/)?.[0];
+      if (row !== null) {
+        const isBracketInput = input.classList.contains('tracker-bracket-input');
+        const isMainInput = input.classList.contains('tracker-point-value');
+        if (isBracketInput) {
+          trackerCalculateBracketOnly(row, input);
+        } else if (isMainInput) {
+          const demandValue = trackerGetDemandValue(row);
+          const offerValue = trackerGetOfferValue(row);
+          if (demandValue && offerValue) {
+            trackerCalculate();
+          } else if (demandValue || offerValue) {
+            trackerCalculateRowOnly(row);
+          }
+        }
+      }
+    }
+  }
+
+  // ======== Bracket-only (unchanged) ========
+  function trackerCalculateBracketOnly(row, triggeredInput) {
+    const isDemand = triggeredInput.id.includes('demand');
+    const side = isDemand ? 'demand' : 'offer';
+    const lowInput = document.getElementById(`tracker-${side}-low-${row}`);
+    const highInput = document.getElementById(`tracker-${side}-high-${row}`);
+    if (lowInput && highInput && lowInput.value && highInput.value) {
+      const low = trackerParseNumber(lowInput.value);
+      const high = trackerParseNumber(highInput.value);
+      const average = (low + high) / 2;
+      const displayDiv = document.getElementById(`tracker-${side}-display-${row}`);
+      if (displayDiv) {
+        const formattedDisplay = `${trackerFormatNumber(low)} / ${trackerFormatNumber(high)} (${trackerFormatNumber(average)})`;
+        displayDiv.innerHTML = formattedDisplay;
+        displayDiv.style.display = 'block';
+      }
+      const demandValue = trackerGetDemandValue(row);
+      const offerValue = trackerGetOfferValue(row);
+      if (demandValue && offerValue) {
+        const midpoint = (demandValue + offerValue) / 2;
+        const midpointSpan = document.querySelector(`.tracker-midpoint-value-${row}`);
+        if (midpointSpan) midpointSpan.textContent = trackerFormatNumber(midpoint);
+      }
+    }
+  }
+
+  // ======== Row-only midpoint (unchanged) ========
+  function trackerCalculateRowOnly(row) {
+    const demand = trackerGetDemandValue(row);
+    const offer = trackerGetOfferValue(row);
+    if (demand || offer) {
+      const midpoint = (demand + offer) / 2;
+      const midpointSpan = document.querySelector(`.tracker-midpoint-value-${row}`);
+      if (midpointSpan) midpointSpan.textContent = trackerFormatNumber(midpoint);
+      trackerUpdateBracketDisplay(row, 'demand');
+      trackerUpdateBracketDisplay(row, 'offer');
+    }
+  }
+
+  function trackerToggleBracket(checkbox, side) {
+    const row = checkbox.getAttribute('data-row');
+    const bracketDiv = document.getElementById(`tracker-${side === 'left' ? 'demand' : 'offer'}-bracket-${row}`);
+    const input = document.querySelector(`.tracker-${side === 'left' ? 'demand' : 'offer'}-input-${row}`);
+    const displayDiv = document.getElementById(`tracker-${side === 'left' ? 'demand' : 'offer'}-display-${row}`);
+    if (checkbox.checked) {
+      bracketDiv.classList.add('active');
+      if (input) input.style.display = 'none';
+      if (displayDiv) displayDiv.style.display = 'block';
+    } else {
+      bracketDiv.classList.remove('active');
+      if (input) input.style.display = 'inline-block';
+      if (displayDiv) displayDiv.style.display = 'none';
+    }
+    trackerOnUserInput();
+  }
+
+  function trackerGetDemandValue(row) {
+    const checkbox = document.getElementById(`trackerCheckLeft${row}`);
+    if (checkbox && checkbox.checked) {
+      const low = trackerParseNumber(document.getElementById(`tracker-demand-low-${row}`).value);
+      const high = trackerParseNumber(document.getElementById(`tracker-demand-high-${row}`).value);
+      return (low + high) / 2;
+    } else {
+      const el = document.querySelector(`.tracker-demand-input-${row}`);
+      return el ? trackerParseNumber(el.value) : 0;
+    }
+  }
+  function trackerGetOfferValue(row) {
+    const checkbox = document.getElementById(`trackerCheckRight${row}`);
+    if (checkbox && checkbox.checked) {
+      const low = trackerParseNumber(document.getElementById(`tracker-offer-low-${row}`).value);
+      const high = trackerParseNumber(document.getElementById(`tracker-offer-high-${row}`).value);
+      return (low + high) / 2;
+    } else {
+      const el = document.querySelector(`.tracker-offer-input-${row}`);
+      return el ? trackerParseNumber(el.value) : 0;
+    }
+  }
+  function trackerGetBracketDisplayValues(row, side) {
+    const checkbox = document.getElementById(`trackerCheck${side === 'demand' ? 'Left' : 'Right'}${row}`);
+    if (checkbox && checkbox.checked) {
+      const low = trackerParseNumber(document.getElementById(`tracker-${side}-low-${row}`).value);
+      const high = trackerParseNumber(document.getElementById(`tracker-${side}-high-${row}`).value);
+      const average = (low + high) / 2;
+      return { low, high, average, isBracket: true };
+    }
+    return { isBracket: false };
+  }
+  function trackerUpdateBracketDisplay(row, side) {
+    const displayDiv = document.getElementById(`tracker-${side}-display-${row}`);
+    const bracketValues = trackerGetBracketDisplayValues(row, side);
+    if (bracketValues.isBracket && displayDiv) {
+      const formattedDisplay = `${trackerFormatNumber(bracketValues.low)} / ${trackerFormatNumber(bracketValues.high)} (${trackerFormatNumber(bracketValues.average)})`;
+      displayDiv.innerHTML = formattedDisplay;
+      displayDiv.style.display = 'block';
+    }
+  }
+
+  // ======== Preview (unchanged) ========
+  function trackerPreview() {
+    trackerPreviewActive = true;
+    trackerUpdateChart();
+  }
+
+  // ======== Lock row (unchanged) ========
+  function trackerLockRow(row) {
+    if (trackerLockedRows.has(row)) return;
+    const demandInput = document.querySelector(`.tracker-demand-input-${row}`);
+    const offerInput = document.querySelector(`.tracker-offer-input-${row}`);
+    const demandLow = document.getElementById(`tracker-demand-low-${row}`);
+    const demandHigh = document.getElementById(`tracker-demand-high-${row}`);
+    const offerLow = document.getElementById(`tracker-offer-low-${row}`);
+    const offerHigh = document.getElementById(`tracker-offer-high-${row}`);
+    const checkLeft = document.getElementById(`trackerCheckLeft${row}`);
+    const checkRight = document.getElementById(`trackerCheckRight${row}`);
+    [demandInput, offerInput, demandLow, demandHigh, offerLow, offerHigh, checkLeft, checkRight].forEach(el => { if (el) el.disabled = true; });
+    trackerLockedRows.add(row);
+  }
+
+  // ======== Calculate (unchanged) ========
+  function trackerCalculate() {
+    trackerStartGlobalTimerIfNeeded();
+    trackerLastChangeTime = Date.now();
+    const now = Date.now();
+
+    trackerCalculationData = [];
+    for (let i = 0; i < trackerRowCount; i++) {
+      const demand = trackerGetDemandValue(i);
+      const offer = trackerGetOfferValue(i);
+      if (demand || offer) {
+        const midpoint = (demand + offer) / 2;
+        const roundTime = now; // confirmation moment for this snapshot
+        trackerRoundTimestamps[i] = trackerRoundTimestamps[i] || roundTime; // set once
+        const durationMs = i === 0 ? (trackerRoundTimestamps[0] - (trackerStartTime || trackerRoundTimestamps[0])) : (trackerRoundTimestamps[i] - trackerRoundTimestamps[i - 1]);
+        trackerCalculationData.push({ row: i, demand, offer, midpoint, time: trackerRoundTimestamps[i], durationMs });
+
+        const midpointSpan = document.querySelector(`.tracker-midpoint-value-${i}`);
+        if (midpointSpan) midpointSpan.textContent = trackerFormatNumber(midpoint);
+
+        trackerUpdateBracketDisplay(i, 'demand');
+        trackerUpdateBracketDisplay(i, 'offer');
+
+        const dTimeEl = document.getElementById(`tracker-demand-time-${i}`);
+        const oTimeEl = document.getElementById(`tracker-offer-time-${i}`);
+        const stamp = new Date(trackerRoundTimestamps[i]).toLocaleTimeString();
+        if (dTimeEl) dTimeEl.textContent = `Time: ${stamp}`;
+        if (oTimeEl) oTimeEl.textContent = `Time: ${stamp}`;
+
+        const timeCell = document.querySelector(`.tracker-time-${i}`);
+        if (timeCell) timeCell.textContent = trackerFormatDuration(durationMs);
+
+        trackerLockRow(i);
+      }
+    }
+
+    // Differentials and percentages
+    for (let i = 1; i < trackerCalculationData.length; i++) {
+      const currentRow = trackerCalculationData[i];
+      const previousRow = trackerCalculationData[i - 1];
+      const demandDiff = currentRow.demand - previousRow.demand;
+      const demandPct = previousRow.demand !== 0 ? ((demandDiff / Math.abs(previousRow.demand)) * 100) : 0;
+      const offerDiff = currentRow.offer - previousRow.offer;
+      const offerPct = previousRow.offer !== 0 ? ((offerDiff / Math.abs(previousRow.offer)) * 100) : 0;
+      const demandDiffElement = document.querySelector(`.tracker-demand-differential-${currentRow.row}`);
+      const demandPctElement = document.querySelector(`.tracker-demand-percentage-${currentRow.row}`);
+      const offerDiffElement = document.querySelector(`.tracker-offer-differential-${currentRow.row}`);
+      const offerPctElement = document.querySelector(`.tracker-offer-percentage-${currentRow.row}`);
+      if (demandDiffElement) demandDiffElement.innerHTML = `<label class="tracker_diff_label">Differential</label>$ ${trackerFormatNumber(demandDiff)}`;
+      if (demandPctElement) demandPctElement.textContent = demandPct.toFixed(2) + '%';
+      if (offerDiffElement) offerDiffElement.innerHTML = `<label class="tracker_diff_label">Differential</label>$ ${trackerFormatNumber(offerDiff)}`;
+      if (offerPctElement) offerPctElement.textContent = offerPct.toFixed(2) + '%';
+    }
+
+    trackerAddNewRow();
+
+    trackerPreviewActive = false;
+    trackerUpdateChart();
+    trackerUpdateRoundSummaries();
+    document.getElementById('trackerRoundsCount').textContent = String(trackerCalculationData.length);
+    trackerRenderHistory();
+  }
+
+  function trackerAddNewRow() {
+    const tableBody = document.getElementById('trackerDataTable');
+    const newRow = document.createElement('tr');
+    newRow.innerHTML = `
+      <td class="bg-info">
+        <input type="checkbox" id="trackerCheckLeft${trackerRowCount}" name="trackerMidCheck" class="trackerCheckLeft" data-row="${trackerRowCount}" onchange="trackerToggleBracket(this, 'left')">
+      </td>
+      <td class="text-muted tracker-demand-percentage-${trackerRowCount}">&nbsp;</td>
+      <td class="warning tracker-demand-differential-${trackerRowCount}">&nbsp;</td>
+      <td class="tracker-demand-cell-${trackerRowCount}">
+        <label class="tracker_demand_input">Enter Demand</label>
+        <input class="tracker-point-value tracker-demand-input-${trackerRowCount}" placeholder="Enter Demand" data-row="${trackerRowCount}" style="display: inline-block;" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+        <div class="tracker-bracket-inputs" id="tracker-demand-bracket-${trackerRowCount}">
+          <input class="tracker-bracket-input" placeholder="Low Number" id="tracker-demand-low-${trackerRowCount}" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+          <input class="tracker-bracket-input" placeholder="High Number" id="tracker-demand-high-${trackerRowCount}" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+        </div>
+        <div class="tracker-bracket-display" id="tracker-demand-display-${trackerRowCount}" style="display: none;"></div>
+        <div class="tracker-timestamp" id="tracker-demand-time-${trackerRowCount}"></div>
+      </td>
+      <td class="info tracker-midpoint-${trackerRowCount}">
+        <label class="tracker_mid_label">MidPoint</label>
+        <span class="tracker-midpoint-value-${trackerRowCount}"></span>
+      </td>
+      <td class="tracker-offer-cell-${trackerRowCount}">
+        <label class="tracker_offer_input">Enter Offer</label>
+        <input class="tracker-point-value tracker-offer-input-${trackerRowCount}" placeholder="Enter Offer" data-row="${trackerRowCount}" style="display: inline-block;" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+        <div class="tracker-bracket-inputs" id="tracker-offer-bracket-${trackerRowCount}">
+          <input class="tracker-bracket-input" placeholder="Low Number" id="tracker-offer-low-${trackerRowCount}" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+          <input class="tracker-bracket-input" placeholder="High Number" id="tracker-offer-high-${trackerRowCount}" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+        </div>
+        <div class="tracker-bracket-display" id="tracker-offer-display-${trackerRowCount}" style="display: none;"></div>
+        <div class="tracker-timestamp" id="tracker-offer-time-${trackerRowCount}"></div>
+      </td>
+      <td class="warning tracker-offer-differential-${trackerRowCount}">&nbsp;</td>
+      <td class="text-muted tracker-offer-percentage-${trackerRowCount}">&nbsp;</td>
+      <td class="bg-info">
+        <input type="checkbox" id="trackerCheckRight${trackerRowCount}" name="trackerMidCheck" class="trackerCheckRight" data-row="${trackerRowCount}" onchange="trackerToggleBracket(this, 'right')">
+      </td>
+      <td class="text-muted tracker-time-${trackerRowCount}">&nbsp;</td>
+    `;
+    tableBody.appendChild(newRow);
+    trackerRowCount++;
+  }
+
+  function trackerUpdateRoundSummaries() {
+    const durationsBox = document.getElementById('trackerRoundDurations');
+    const compBox = document.getElementById('trackerMoveComparisons');
+    durationsBox.innerHTML = '<strong>Round durations:</strong> ' + trackerCalculationData.map((d, idx) => `<span class="round-item">Round ${idx + 1}: ${trackerFormatDuration(d.durationMs)}</span>`).join('');
+
+    const parts = [];
+    for (let i = 1; i < trackerCalculationData.length; i++) {
+      const cur = trackerCalculationData[i];
+      const prev = trackerCalculationData[i - 1];
+      const dd = cur.demand - prev.demand;
+      const od = cur.offer - prev.offer;
+      const dp = prev.demand !== 0 ? (dd / Math.abs(prev.demand)) * 100 : 0;
+      const op = prev.offer !== 0 ? (od / Math.abs(prev.offer)) * 100 : 0;
+      parts.push(`<div class="round-item">Round ${i + 1}: Demand ${dd >= 0 ? '+' : ''}${trackerFormatNumber(dd)} (${dp.toFixed(2)}%), Offer ${od >= 0 ? '+' : ''}${trackerFormatNumber(od)} (${op.toFixed(2)}%)</div>`);
+    }
+    compBox.innerHTML = '<strong>Moves comparison:</strong> ' + parts.join('');
+  }
+
+  // ======== Chart & ZOPA (unchanged) ========
+  function trackerComputeIntersections(dArr, oArr) {
+    const points = [];
+    for (let i = 1; i < dArr.length; i++) {
+      const x0 = i - 1, x1 = i;
+      const y0d = dArr[i - 1], y1d = dArr[i];
+      const y0o = oArr[i - 1], y1o = oArr[i];
+      if ([y0d, y1d, y0o, y1o].some(v => v === undefined || v === null)) continue;
+      const a1 = y1d - y0d;
+      const b1 = y0d;
+      const a2 = y1o - y0o;
+      const b2 = y0o;
+      const denom = (a1 - a2);
+      if (denom === 0) continue;
+      const t = (b2 - b1) / denom;
+      if (t >= 0 && t <= 1) {
+        const x = x0 + t;
+        const y = b1 + a1 * t;
+        const mid = y;
+        points.push({ x, y: mid });
+      }
+    }
+    return points;
+  }
+
+  const trackerZopaPlugin = {
+    id: 'trackerZopaPlugin',
+    beforeDatasetsDraw(chart, args, pluginOptions) {
+      const { ctx, chartArea } = chart;
+      const demandMeta = chart.getDatasetMeta(0);
+      const offerMeta = chart.getDatasetMeta(1);
+      if (!demandMeta || !offerMeta) return;
+      const dPts = demandMeta.data;
+      const oPts = offerMeta.data;
+      if (!dPts || !oPts || dPts.length !== oPts.length || dPts.length === 0) return;
+      ctx.save();
+      ctx.beginPath();
+      for (let i = 0; i < dPts.length; i++) {
+        const yU = Math.min(dPts[i].y, oPts[i].y);
+        const x = dPts[i].x;
+        if (i === 0) ctx.moveTo(x, yU); else ctx.lineTo(x, yU);
+      }
+      for (let i = dPts.length - 1; i >= 0; i--) {
+        const yL = Math.max(dPts[i].y, oPts[i].y);
+        const x = dPts[i].x;
+        ctx.lineTo(x, yL);
+      }
+      ctx.closePath();
+      const grd = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+      grd.addColorStop(0, 'rgba(46, 204, 113, 0.10)');
+      grd.addColorStop(1, 'rgba(46, 204, 113, 0.03)');
+      ctx.fillStyle = grd;
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+
+  function trackerUpdateChart() {
+    const ctx = document.getElementById('tracker_canvas').getContext('2d');
+    const labels = trackerCalculationData.map((_, index) => `Round ${index + 1}`);
+    const demandData = trackerCalculationData.map(item => item.demand);
+    const offerData = trackerCalculationData.map(item => item.offer);
+    const midpointData = trackerCalculationData.map(item => item.midpoint);
+
+    let previewMid = null, previewDemand = null, previewOffer = null, previewIndex = trackerRowCount - 1;
+    if (trackerPreviewActive && previewIndex >= 0) {
+      const d = trackerGetDemandValue(previewIndex);
+      const o = trackerGetOfferValue(previewIndex);
+      if (d || o) {
+        previewDemand = d || null; previewOffer = o || null;
+        if (d && o) previewMid = (d + o) / 2;
+      }
+    }
+
+    const intersections = trackerComputeIntersections(demandData, offerData);
+
+    if (trackerChart) trackerChart.destroy();
+
+    trackerChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [
+          { label: 'Demand', data: demandData, borderColor: '#d9534f', backgroundColor: 'rgba(217, 83, 79, 0.1)', borderWidth: 3, fill: false, pointRadius: 4, pointBackgroundColor: '#d9534f' },
+          { label: 'Offer', data: offerData, borderColor: '#5cb85c', backgroundColor: 'rgba(92, 184, 92, 0.1)', borderWidth: 3, fill: false, pointRadius: 4, pointBackgroundColor: '#5cb85c' },
+          { label: 'Midpoint', data: midpointData, borderColor: '#5bc0de', backgroundColor: 'rgba(91, 192, 222, 0.1)', borderWidth: 2, borderDash: [5, 5], fill: false, pointRadius: 3, pointBackgroundColor: '#5bc0de' },
+          { type: 'scatter', label: 'Intersection Midpoint', xAxisID: 'xLinear', data: intersections.map(p => ({ x: p.x, y: p.y })), borderColor: '#2ecc71', backgroundColor: '#2ecc71', pointRadius: 5, pointHoverRadius: 7, showLine: false },
+          ...(trackerPreviewActive && previewDemand !== null ? [{ label: 'Preview Demand', data: [...demandData, previewIndex === demandData.length ? previewDemand : null], borderColor: 'rgba(217,83,79,0.5)', backgroundColor: 'rgba(217,83,79,0.08)', borderWidth: 2, borderDash: [6, 3], fill: false, pointRadius: 0 }] : []),
+          ...(trackerPreviewActive && previewOffer !== null ? [{ label: 'Preview Offer', data: [...offerData, previewIndex === offerData.length ? previewOffer : null], borderColor: 'rgba(92,184,92,0.5)', backgroundColor: 'rgba(92,184,92,0.08)', borderWidth: 2, borderDash: [6, 3], fill: false, pointRadius: 0 }] : []),
+          ...(trackerPreviewActive && previewMid !== null ? [{ label: 'Preview Midpoint', data: [...midpointData, previewIndex === midpointData.length ? previewMid : null], borderColor: 'rgba(91,192,222,0.6)', backgroundColor: 'rgba(91,192,222,0.1)', borderWidth: 2, borderDash: [3, 3], fill: false, pointRadius: 0 }] : [])
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        scales: {
+          x: { type: 'category', ticks: { color: '#e0e0e0' } },
+          xLinear: { type: 'linear', position: 'bottom', display: false, min: 0, max: Math.max(0, labels.length - 1) },
+          y: { beginAtZero: true, ticks: { callback: function(value){ return trackerFormatNumber(value); }, color: '#e0e0e0' }, grid: { color: 'rgba(255,255,255,0.08)' } }
+        },
+        plugins: { legend: { labels: { color: '#e0e0e0' } }, tooltip: { callbacks: { label: function(context) { if (context.dataset.type === 'scatter') { return 'Intersection Mid: $' + trackerFormatNumber(context.parsed.y); } return context.dataset.label + ': $' + trackerFormatNumber(context.parsed.y); } } } }
+      },
+      plugins: [trackerZopaPlugin]
+    });
+  }
+
+  function trackerReset() {
+    const tableBody = document.getElementById('trackerDataTable');
+    tableBody.innerHTML = `
+      <tr id="trackerTestRow">
+        <td class="bg-info">
+          <input type="checkbox" id="trackerCheckLeft0" name="trackerMidCheck" class="trackerCheckLeft" data-row="0" onchange="trackerToggleBracket(this, 'left')">
+        </td>
+        <td class="text-muted tracker-demand-percentage-0">&nbsp;</td>
+        <td class="warning tracker-demand-differential-0">&nbsp;</td>
+        <td class="tracker-demand-cell-0">
+          <label class="tracker_demand_input">Enter Demand</label>
+          <input class="tracker-point-value tracker-demand-input-0" placeholder="Enter Demand" data-row="0" style="display: inline-block;" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+          <div class="tracker-bracket-inputs" id="tracker-demand-bracket-0">
+            <input class="tracker-bracket-input" placeholder="Low Number" id="tracker-demand-low-0" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+            <input class="tracker-bracket-input" placeholder="High Number" id="tracker-demand-high-0" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+          </div>
+          <div class="tracker-bracket-display" id="tracker-demand-display-0" style="display: none;"></div>
+          <div class="tracker-timestamp" id="tracker-demand-time-0"></div>
+        </td>
+        <td class="info tracker-midpoint-0">
+          <label class="tracker_mid_label">MidPoint</label>
+          <span class="tracker-midpoint-value-0"></span>
+        </td>
+        <td class="tracker-offer-cell-0">
+          <label class="tracker_offer_input">Enter Offer</label>
+          <input class="tracker-point-value tracker-offer-input-0" placeholder="Enter Offer" data-row="0" style="display: inline-block;" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+          <div class="tracker-bracket-inputs" id="tracker-offer-bracket-0">
+            <input class="tracker-bracket-input" placeholder="Low Number" id="tracker-offer-low-0" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+            <input class="tracker-bracket-input" placeholder="High Number" id="tracker-offer-high-0" oninput="trackerFormatNumberInput(this); trackerOnUserInput();" onblur="trackerFormatNumberInput(this)" onkeydown="trackerHandleEnterKey(event, this)">
+          </div>
+          <div class="tracker-bracket-display" id="tracker-offer-display-0" style="display: none;"></div>
+          <div class="tracker-timestamp" id="tracker-offer-time-0"></div>
+        </td>
+        <td class="warning tracker-offer-differential-0">&nbsp;</td>
+        <td class="text-muted tracker-offer-percentage-0">&nbsp;</td>
+        <td class="bg-info">
+          <input type="checkbox" id="trackerCheckRight0" name="trackerMidCheck" class="trackerCheckRight" data-row="0" onchange="trackerToggleBracket(this, 'right')">
+        </td>
+        <td class="text-muted tracker-time-0">&nbsp;</td>
+      </tr>`;
+
+    trackerRowCount = 1;
+    trackerCalculationData = [];
+    trackerLockedRows = new Set();
+    trackerRoundTimestamps = [];
+    trackerPreviewActive = false;
+    trackerHypoActive = false;
+
+    if (trackerChart) { trackerChart.destroy(); trackerChart = null; }
+
+    if (trackerTimerInterval) { clearInterval(trackerTimerInterval); trackerTimerInterval = null; }
+    trackerStartTime = null;
+    trackerLastChangeTime = null;
+    document.getElementById('trackerTotalTime').textContent = '00:00:00';
+    document.getElementById('trackerSinceLast').textContent = '00:00:00';
+    document.getElementById('trackerProcessStatus').textContent = 'Waiting for first input…';
+    document.getElementById('trackerRoundsCount').textContent = '0';
+
+    document.getElementById('trackerRoundDurations').innerHTML = '';
+    document.getElementById('trackerMoveComparisons').innerHTML = '';
+  }
+
+  function trackerHypothetical() {
+    if (trackerCalculationData.length < 2) { trackerHypoActive = false; trackerPreviewActive = false; trackerUpdateChart(); return; }
+    trackerHypoActive = true;
+    const last = trackerCalculationData[trackerCalculationData.length - 1];
+    const prev = trackerCalculationData[trackerCalculationData.length - 2];
+    const nextDemand = last.demand + (last.demand - prev.demand) * 0.5;
+    const nextOffer = last.offer + (last.offer - prev.offer) * 0.5;
+    const idx = trackerRowCount - 1;
+    const dEl = document.querySelector(`.tracker-demand-input-${idx}`);
+    const oEl = document.querySelector(`.tracker-offer-input-${idx}`);
+    if (dEl) dEl.value = trackerFormatNumber(nextDemand);
+    if (oEl) oEl.value = trackerFormatNumber(nextOffer);
+    trackerPreviewActive = true;
+    trackerUpdateChart();
+  }
+
+  function trackerSavePDF() {
+    const container = document.querySelector('.offer-demand-tracker');
+    if (!container) return;
+    html2canvas(container).then(canvas => {
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save('offer-demand-tracker.pdf');
+    });
+  }
+
+  // ======== Visible UI <-> Hidden Engine Bridge ========
+  function vrCurrentRow() { return trackerRowCount - 1; }
+  function vrHidden(side) {
+    const i = vrCurrentRow();
+    return {
+      main: document.querySelector(`.tracker-${side}-input-${i}`),
+      low: document.getElementById(`tracker-${side}-low-${i}`),
+      high: document.getElementById(`tracker-${side}-high-${i}`),
+      check: document.getElementById(`trackerCheck${side === 'demand' ? 'Left' : 'Right'}${i}`),
+      display: document.getElementById(`tracker-${side}-display-${i}`)
+    };
+  }
+  function vrUpdateMidpointFromHidden() {
+    const i = vrCurrentRow();
+    const d = trackerGetDemandValue(i);
+    const o = trackerGetOfferValue(i);
+    const mid = (d || 0) && (o || 0) ? (d + o) / 2 : null;
+    document.getElementById('vr-midpoint').textContent = mid !== null ? trackerFormatNumber(mid) : '—';
+  }
+  function vrTimeNow(el) {
+    el.textContent = 'Timestamp: ' + new Date().toLocaleTimeString();
+  }
+
+  // Mirror visible demand/offer value to hidden engine
+  function vrOnValueInput(side, value) {
+    const h = vrHidden(side);
+    if (!h.main) return;
+    h.main.value = value;
+    trackerFormatNumberInput(h.main);
+    trackerOnUserInput();
+    trackerCalculateRowOnly(vrCurrentRow());
+    vrUpdateMidpointFromHidden();
+    const timeEl = document.getElementById(`vr-${side}-time`);
+    if (timeEl) vrTimeNow(timeEl);
+  }
+
+  function vrToggleBracket(side, checked) {
+    const h = vrHidden(side);
+    if (!h.check) return;
+    h.check.checked = checked;
+    trackerToggleBracket(h.check, side === 'demand' ? 'left' : 'right');
+    const wrap = document.getElementById(`vr-${side}-bracket`);
+    const box = document.getElementById(`vrCheck${side === 'demand' ? 'Left' : 'Right'}`);
+    if (wrap) wrap.classList.toggle('active', checked);
+    if (box) box.classList.toggle('active', checked);
+    // Hide/show the visible single-value input when bracket is active
+    const vInput = document.getElementById(side === 'demand' ? 'vr-demand' : 'vr-offer');
+    if (vInput) vInput.style.display = checked ? 'none' : '';
+    vrUpdateMidpointFromHidden();
+  }
+
+  function vrOnBracketInput(side, which, value) {
+    const h = vrHidden(side);
+    if (!h[which]) return;
+    h[which].value = value;
+    trackerFormatNumberInput(h[which]);
+    trackerOnUserInput();
+    trackerCalculateBracketOnly(vrCurrentRow(), h[which]);
+    // Reflect bracket display visually
+    const values = trackerGetBracketDisplayValues(vrCurrentRow(), side);
+    const vd = document.getElementById(`vr-${side}-display`);
+    if (values.isBracket && vd) {
+      vd.style.display = 'block';
+      vd.innerHTML = `${trackerFormatNumber(values.low)} / ${trackerFormatNumber(values.high)} (${trackerFormatNumber(values.average)})`;
+    }
+    const timeEl = document.getElementById(`vr-${side}-time`);
+    if (timeEl) vrTimeNow(timeEl);
+    vrUpdateMidpointFromHidden();
+  }
+
+  function vrSyncVisibleFromHidden() {
+    const d = vrHidden('demand');
+    const o = vrHidden('offer');
+    const dCheck = !!(d.check && d.check.checked);
+    const oCheck = !!(o.check && o.check.checked);
+    const vrcLeft = document.getElementById('vrCheckLeft');
+    const vrcRight = document.getElementById('vrCheckRight');
+    if (vrcLeft) vrcLeft.classList.toggle('active', dCheck);
+    if (vrcRight) vrcRight.classList.toggle('active', oCheck);
+    document.getElementById('vr-demand-bracket').classList.toggle('active', dCheck);
+    document.getElementById('vr-offer-bracket').classList.toggle('active', oCheck);
+
+    const vDemand = document.getElementById('vr-demand');
+    const vOffer = document.getElementById('vr-offer');
+    if (vDemand) { vDemand.value = d.main ? d.main.value : ''; vDemand.style.display = dCheck ? 'none' : ''; }
+    if (vOffer) { vOffer.value = o.main ? o.main.value : ''; vOffer.style.display = oCheck ? 'none' : ''; }
+
+    const vdL = document.getElementById('vr-demand-low');
+    const vdH = document.getElementById('vr-demand-high');
+    const voL = document.getElementById('vr-offer-low');
+    const voH = document.getElementById('vr-offer-high');
+    if (vdL) vdL.value = d.low ? d.low.value : '';
+    if (vdH) vdH.value = d.high ? d.high.value : '';
+    if (voL) voL.value = o.low ? o.low.value : '';
+    if (voH) voH.value = o.high ? o.high.value : '';
+
+    // Displays
+    const dVals = trackerGetBracketDisplayValues(vrCurrentRow(), 'demand');
+    const oVals = trackerGetBracketDisplayValues(vrCurrentRow(), 'offer');
+    const vd = document.getElementById('vr-demand-display');
+    const vo = document.getElementById('vr-offer-display');
+    if (vd) { if (dVals.isBracket) { vd.style.display='block'; vd.innerHTML = `${trackerFormatNumber(dVals.low)} / ${trackerFormatNumber(dVals.high)} (${trackerFormatNumber(dVals.average)})`; } else { vd.style.display='none'; vd.innerHTML=''; } }
+    if (vo) { if (oVals.isBracket) { vo.style.display='block'; vo.innerHTML = `${trackerFormatNumber(oVals.low)} / ${trackerFormatNumber(oVals.high)} (${trackerFormatNumber(oVals.average)})`; } else { vo.style.display='none'; vo.innerHTML=''; } }
+
+    vrUpdateMidpointFromHidden();
+  }
+
+  function trackerRenderHistory() {
+    const body = document.getElementById('trackerHistoryBody');
+    if (!body) return;
+    const rows = [];
+    for (let i = 0; i < trackerCalculationData.length; i++) {
+      const cur = trackerCalculationData[i];
+      const prev = i > 0 ? trackerCalculationData[i - 1] : null;
+      const dd = prev ? cur.demand - prev.demand : 0;
+      const od = prev ? cur.offer - prev.offer : 0;
+      const oVals = trackerGetBracketDisplayValues(i, 'offer');
+      const offerText = oVals.isBracket
+        ? `${trackerFormatNumber(oVals.low)} / ${trackerFormatNumber(oVals.high)} (${trackerFormatNumber(oVals.average)})`
+        : trackerFormatNumber(cur.offer);
+      rows.push(`
+        <tr>
+          <td>Round ${i + 1}</td>
+          <td>${new Date(cur.time).toLocaleTimeString()}</td>
+          <td>${trackerFormatDuration(cur.durationMs)}</td>
+          <td class="num-red">${trackerFormatNumber(cur.demand)}</td>
+          <td class="num-red">${prev ? (dd >= 0 ? '+' : '') + trackerFormatNumber(dd) : '—'}</td>
+          <td class="num-blue">${trackerFormatNumber(cur.midpoint)}</td>
+          <td class="num-green">${offerText}</td>
+          <td class="num-green">${prev ? (od >= 0 ? '+' : '') + trackerFormatNumber(od) : '—'}</td>
+          <td><span class="pill">Confirmed</span></td>
+        </tr>`);
+    }
+    if (trackerPreviewActive) {
+      const idx = vrCurrentRow();
+      const d = trackerGetDemandValue(idx);
+      const o = trackerGetOfferValue(idx);
+      if (d || o) {
+        const prev = trackerCalculationData[trackerCalculationData.length - 1] || null;
+        const mid = (d && o) ? (d + o) / 2 : 0;
+        const dd = prev ? d - prev.demand : 0;
+        const od = prev ? o - prev.offer : 0;
+        const oVals = trackerGetBracketDisplayValues(idx, 'offer');
+        const offerText = oVals.isBracket
+          ? `${trackerFormatNumber(oVals.low)} / ${trackerFormatNumber(oVals.high)} (${trackerFormatNumber(oVals.average)})`
+          : trackerFormatNumber(o);
+        rows.push(`
+          <tr>
+            <td>Round ${trackerCalculationData.length + 1}</td>
+            <td>${new Date().toLocaleTimeString()}</td>
+            <td>0:00</td>
+            <td class="num-red">${trackerFormatNumber(d)}</td>
+            <td class="num-red">${prev ? (dd >= 0 ? '+' : '') + trackerFormatNumber(dd) : '—'}</td>
+            <td class="num-blue">${trackerFormatNumber(mid)}</td>
+            <td class="num-green">${offerText}</td>
+            <td class="num-green">${prev ? (od >= 0 ? '+' : '') + trackerFormatNumber(od) : '—'}</td>
+            <td><span class="pill pill-preview">Preview</span></td>
+          </tr>`);
+      }
+    }
+    body.innerHTML = rows.join('');
+  }
+
+  // ======== Visible UI actions ========
+  function vrPreview() {
+    // Mirror values then preview
+    const vD = document.getElementById('vr-demand').value;
+    const vO = document.getElementById('vr-offer').value;
+    vrOnValueInput('demand', vD);
+    vrOnValueInput('offer', vO);
+    trackerPreview();
+    document.getElementById('vrPreviewBadge').style.display = 'inline-block';
+    trackerRenderHistory();
+  }
+  function vrCalculateConfirm() {
+    const vD = document.getElementById('vr-demand').value;
+    const vO = document.getElementById('vr-offer').value;
+    vrOnValueInput('demand', vD);
+    vrOnValueInput('offer', vO);
+    trackerCalculate();
+    document.getElementById('vrPreviewBadge').style.display = 'none';
+    // Reset visible inputs for next round
+    document.getElementById('vr-demand').value = '';
+    document.getElementById('vr-offer').value = '';
+    document.getElementById('vr-demand-low').value = '';
+    document.getElementById('vr-demand-high').value = '';
+    document.getElementById('vr-offer-low').value = '';
+    document.getElementById('vr-offer-high').value = '';
+    document.getElementById('vr-demand-display').style.display = 'none';
+    document.getElementById('vr-offer-display').style.display = 'none';
+    document.getElementById('vr-midpoint').textContent = '—';
+    document.getElementById('vr-demand-bracket').classList.remove('active');
+    document.getElementById('vr-offer-bracket').classList.remove('active');
+    document.getElementById('vrCheckLeft').classList.remove('active');
+    document.getElementById('vrCheckRight').classList.remove('active');
+    // Ensure single-value inputs are visible for next round
+    document.getElementById('vr-demand').style.display = '';
+    document.getElementById('vr-offer').style.display = '';
+  }
+  function vrHypothetical() {
+    trackerHypothetical();
+    vrSyncVisibleFromHidden();
+    trackerPreviewActive = true;
+    document.getElementById('vrPreviewBadge').style.display = 'inline-block';
+    trackerRenderHistory();
+  }
+  function vrResetAll() {
+    trackerReset();
+    // Clear visible
+    document.getElementById('vr-demand').value = '';
+    document.getElementById('vr-offer').value = '';
+    document.getElementById('vr-demand-low').value = '';
+    document.getElementById('vr-demand-high').value = '';
+    document.getElementById('vr-offer-low').value = '';
+    document.getElementById('vr-offer-high').value = '';
+    document.getElementById('vr-demand-display').style.display = 'none';
+    document.getElementById('vr-offer-display').style.display = 'none';
+    document.getElementById('vr-demand-bracket').classList.remove('active');
+    document.getElementById('vr-offer-bracket').classList.remove('active');
+    document.getElementById('vrCheckLeft').classList.remove('active');
+    document.getElementById('vrCheckRight').classList.remove('active');
+    document.getElementById('vrPreviewBadge').style.display = 'none';
+    document.getElementById('vr-midpoint').textContent = '—';
+    trackerRenderHistory();
+  }
+
+  // ======== Init listeners ========
+  document.addEventListener('DOMContentLoaded', function() {
+    const numberInputs = document.querySelectorAll('.tracker-point-value, .tracker-bracket-input');
+    numberInputs.forEach(function(input) {
+      input.addEventListener('blur', function() { trackerFormatNumberInput(this); });
+      input.addEventListener('input', function() { trackerOnUserInput(); });
+    });
+
+    // Visible inputs
+    document.getElementById('vr-demand').addEventListener('input', (e) => { vrOnValueInput('demand', e.target.value); });
+    document.getElementById('vr-offer').addEventListener('input', (e) => { vrOnValueInput('offer', e.target.value); });
+
+    // Bracket toggles
+    document.getElementById('vrCheckLeft').addEventListener('click', (e) => { const el=e.currentTarget; el.classList.toggle('active'); vrToggleBracket('demand', el.classList.contains('active')); });
+    document.getElementById('vrCheckRight').addEventListener('click', (e) => { const el=e.currentTarget; el.classList.toggle('active'); vrToggleBracket('offer', el.classList.contains('active')); });
+
+    // Bracket inputs
+    document.getElementById('vr-demand-low').addEventListener('input', (e)=>{ vrOnBracketInput('demand','low', e.target.value); });
+    document.getElementById('vr-demand-high').addEventListener('input', (e)=>{ vrOnBracketInput('demand','high', e.target.value); });
+    document.getElementById('vr-offer-low').addEventListener('input', (e)=>{ vrOnBracketInput('offer','low', e.target.value); });
+    document.getElementById('vr-offer-high').addEventListener('input', (e)=>{ vrOnBracketInput('offer','high', e.target.value); });
+
+    trackerRenderHistory();
+  });
+</script>
